@@ -177,8 +177,7 @@ class BPETokenizer:
             sequence = [self.get_bos_id()] + sequence + [self.get_eos_id()]
         
         return sequence
-
-        
+    
 
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
         """
