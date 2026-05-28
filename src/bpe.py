@@ -142,7 +142,6 @@ class BPETokenizer:
 
     def load(self, path: str | Path):
         """
-        TODO: save()로 저장한 JSON 파일을 읽어 vocabulary와 merge rule을 복원합니다.
         """
         # 파일을 열고 내용을 obj에 할당한다
         with open(path, 'r', encoding='utf-8') as fp:
@@ -177,8 +176,7 @@ class BPETokenizer:
             sequence = [self.get_bos_id()] + sequence + [self.get_eos_id()]
         
         return sequence
-
-        
+    
 
     def decode(self, ids: list[int], skip_special: bool = True) -> str:
         """
