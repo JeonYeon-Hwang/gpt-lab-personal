@@ -22,16 +22,21 @@ class LayerNorm(nn.Module):
         self.eps = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
-        raise NotImplementedError("LayerNorm.forward를 구현하세요.")
+        """"""
+        # x: 3차원(batch_size, Sequence_len, emb_dim)
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        norm_x = (x - mean) / torch.sqrt(var + self.eps)
+
+        return self.gamma * norm_x + self.beta
 
 
 class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
-        raise NotImplementedError("GELU.forward를 구현하세요.")
+        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi)) * 
+                                        (x + 0.044715 * torch.pow(x, 3))))
 
 
 class FeedForward(nn.Module):
@@ -39,12 +44,16 @@ class FeedForward(nn.Module):
 
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
-        # TODO: d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
-        raise NotImplementedError("FeedForward.__init__을 구현하세요.")
+        self.layers = nn.Sequential(
+            nn.Linear(d_model, d_model * mult),
+            GELU(),
+            nn.Linear(d_model * mult, d_model),
+            nn.Dropout(dropout)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: FeedForward 네트워크를 통과시킵니다."""
-        raise NotImplementedError("FeedForward.forward를 구현하세요.")
+        """"""
+        return self.layers(x)
 
 
 class TransformerBlock(nn.Module):
@@ -57,12 +66,27 @@ class TransformerBlock(nn.Module):
         self,
         d_model: int,
         n_heads: int,
+        context_length: int,
         drop_rate: float = 0.1,
         qkv_bias: bool = False,
     ):
         super().__init__()
-        # TODO: attention, ffn, layernorm, dropout을 정의하세요.
-        raise NotImplementedError("TransformerBlock.__init__을 구현하세요.")
+        self.att = MultiHeadAttention(
+            d_in=d_model,
+            d_out=d_model,
+            context_length=context_length,
+            num_heads=n_heads,
+            dropout=drop_rate,
+            qkv_bias=qkv_bias)
+        
+        self.ff = FeedForward(
+            d_model=d_model,
+            dropout=drop_rate)
+        
+        self.norm1 = LayerNorm(normalized_shape=d_model)
+        self.norm2 = LayerNorm(normalized_shape=d_model)
+        
+        self.dropout = nn.Dropout(drop_rate)
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
         """TODO: attention과 ffn을 residual connection으로 연결합니다."""
