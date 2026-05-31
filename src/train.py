@@ -9,17 +9,32 @@ try:
 except ImportError:
     from model import GPTModel
 
-
+# 인자값 설명:
+# 현 문장 데이터(배치 갯수, 문장 길이), 정답 문장(한 단어가 더 있음), 모델 본체, 하드웨어 객체  
 def calc_loss_batch(
     input_batch: torch.Tensor,
     target_batch: torch.Tensor,
     model: GPTModel,
     device: torch.device,
 ) -> torch.Tensor:
-    """TODO: 한 배치를 device로 옮긴 뒤 다음 토큰 예측 cross entropy loss를 계산합니다."""
-    raise NotImplementedError("calc_loss_batch를 구현하세요.")
+    """"""
+    # 데이터를 특정 하드웨어에서 연산하도록 지정
+    inputs = input_batch.to(device)
+    targets = target_batch.to(device)
+
+    # 모델 실행
+    logits = model(inputs)
+
+    # loss(cross_entropy) 산출하기: 2차원(logits)과 1차원(targets) 비교
+    loss = torch.nn.functional.cross_entropy(
+        logits.flatten(0, 1), targets.flatten()
+    )
+
+    return loss
 
 
+# 인자값 설명: 
+# data_loader => 각 배치를 감싼 객체[(inputs, targets), ..], num_batches => 최대 몇 개?  
 def calc_loss_loader(
     data_loader,
     model: GPTModel,
@@ -27,8 +42,22 @@ def calc_loss_loader(
     num_batches: int | None = None,
 ) -> float:
     """TODO: data_loader의 평균 loss를 계산합니다. 검증에서는 torch.no_grad()를 사용하세요."""
-    raise NotImplementedError("calc_loss_loader를 구현하세요.")
+    total_loss = 0
+    batch_cnt = 0
 
+    with torch.no_grad():
+        for i, (input_batch, target_batch) in enumerate(data_loader):
+            # loss 산출
+            loss = calc_loss_batch(input_batch, target_batch, model, device)
+            total_loss += loss.item()
+            batch_cnt += 1
+
+            # 탈출 조건
+            if num_batches and batch_cnt >= num_batches:
+                break
+
+    # 평균치 반환
+    return total_loss / batch_cnt
 
 def save_checkpoint(
     model: GPTModel,
