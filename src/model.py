@@ -22,16 +22,21 @@ class LayerNorm(nn.Module):
         self.eps = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: 마지막 차원의 평균과 분산으로 정규화한 뒤 gamma/beta를 적용합니다."""
-        raise NotImplementedError("LayerNorm.forward를 구현하세요.")
+        """"""
+        # x: 3차원(batch_size, Sequence_len, emb_dim)
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        norm_x = (x - mean) / torch.sqrt(var + self.eps)
+
+        return self.gamma * norm_x + self.beta
 
 
 class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: tanh 근사식 또는 torch 연산으로 GELU를 구현합니다."""
-        raise NotImplementedError("GELU.forward를 구현하세요.")
+        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi)) * 
+                                        (x + 0.044715 * torch.pow(x, 3))))
 
 
 class FeedForward(nn.Module):
@@ -39,12 +44,16 @@ class FeedForward(nn.Module):
 
     def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
         super().__init__()
-        # TODO: d_model -> mult*d_model -> d_model 구조의 작은 MLP를 정의하세요.
-        raise NotImplementedError("FeedForward.__init__을 구현하세요.")
+        self.layers = nn.Sequential(
+            nn.Linear(d_model, d_model * mult),
+            GELU(),
+            nn.Linear(d_model * mult, d_model),
+            nn.Dropout(dropout)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """TODO: FeedForward 네트워크를 통과시킵니다."""
-        raise NotImplementedError("FeedForward.forward를 구현하세요.")
+        """"""
+        return self.layers(x)
 
 
 class TransformerBlock(nn.Module):
@@ -61,12 +70,36 @@ class TransformerBlock(nn.Module):
         qkv_bias: bool = False,
     ):
         super().__init__()
-        # TODO: attention, ffn, layernorm, dropout을 정의하세요.
-        raise NotImplementedError("TransformerBlock.__init__을 구현하세요.")
+        self.att = MultiHeadAttention(
+            d_model=d_model,
+            n_heads=n_heads,
+            drop_rate=drop_rate,
+            qkv_bias=qkv_bias)
+        
+        self.ff = FeedForward(
+            d_model=d_model,
+            dropout=drop_rate)
+        
+        self.norm1 = LayerNorm(normalized_shape=d_model)
+        self.norm2 = LayerNorm(normalized_shape=d_model)
+        
+        self.dropout = nn.Dropout(drop_rate)
 
     def forward(self, x: torch.Tensor, causal_mask: bool = True) -> torch.Tensor:
-        """TODO: attention과 ffn을 residual connection으로 연결합니다."""
-        raise NotImplementedError("TransformerBlock.forward를 구현하세요.")
+        """"""
+        shortcut = x
+        x = self.norm1(x)
+        x = self.att(x)
+        x = self.dropout(x)
+        x = x + shortcut
+
+        shortcut = x
+        x = self.norm2(x)
+        x = self.ff(x)
+        x = self.dropout(x)
+        x = x + shortcut
+
+        return x
 
 
 class GPTModel(nn.Module):
@@ -75,29 +108,100 @@ class GPTModel(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         self.config = config
-        # TODO: embedding, blocks, final layernorm, lm_head를 정의하세요.
-        raise NotImplementedError("GPTModel.__init__을 구현하세요.")
+        v_size = config["vocab_size"]
+        e_dim = config["emb_dim"]
+        context_len = config["context_length"]
+        drop_rate = config["drop_rate"]
+        n_layers = config["n_layers"]
+        n_heads = config["n_heads"]
+        qkv_bias = config["qkv_bias"]
 
+        self.tok_emb = nn.Embedding(v_size, e_dim)
+        self.pos_emb = nn.Embedding(context_len, e_dim)
+        self.drop_emb = nn.Dropout(drop_rate)
+
+        self.trf_blocks = nn.Sequential(
+            *[TransformerBlock(e_dim, n_heads, drop_rate, qkv_bias) 
+              for _ in range(n_layers)]
+        )
+
+        self.final_norm = LayerNorm(e_dim)
+        self.out_head = nn.Linear(e_dim, v_size, bias=False)
+
+        self.loss_fn = nn.CrossEntropyLoss()
+
+
+    # idx: 현재 입력된 단어들의 ID를 의미
+    # targets: 정답지(training용) => 없으면: 실제 구동 상태, 있으면: loss 반환(역전파)
     def forward(
         self,
         idx: torch.Tensor,
         targets: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
-        TODO: logits를 만들고, targets가 있으면 cross entropy loss도 함께 반환합니다.
-
         Returns:
             targets가 None이면 logits
             targets가 있으면 (loss, logits)
         """
-        raise NotImplementedError("GPTModel.forward를 구현하세요.")
+        # 1. idx의 행(문장 갯수)렬(문장 길이)를 구한다
+        batch_size, seq_len = idx.shape
+        
+        # 2. idx 기반으로 임베딩 행렬을 생성한다
+        #    또한, 위치 행렬도 생성한다  
+        #    이 둘을 합해 x 생성 
+        tok_embeds = self.tok_emb(idx)
+        pos_indices = torch.arange(seq_len, device=idx.device)
+        pos_embeds = self.pos_emb(pos_indices)
+        x = tok_embeds + pos_embeds
 
+        # 3. dropout 진행
+        # 4. 트랜스포머 블록 통과: N번
+        # 5. 마지막 정규화 진행
+        x = self.drop_emb(x)
+        x = self.trf_blocks(x)
+        x = self.final_norm(x)
 
+        # 6. logits 산출: 압축 차원 
+        #    => 총 단어 차원만큼 확장(Batch_Size, Context_Length, Vocab_Size)
+        logits = self.out_head(x)
+
+        if targets is not None:
+            # 평탄화(차원 줄이기) 진행  
+            flat_logits = logits.view(-1, logits.size(-1))
+            flat_targets = targets.view(-1)
+
+            # loss 산출
+            loss = self.loss_fn(flat_logits, flat_targets)
+
+            return loss, logits
+        else:
+            return logits
+
+# 인자값 설명:
+# 모델 본체, 문장(배치, 현 문장 길이), 붙일 단어 최대 수, 최대 문맥 길이 
 def generate_text_simple(
     model: GPTModel,
     idx: torch.Tensor,
     max_new_tokens: int,
     context_size: int,
 ) -> torch.Tensor:
-    """TODO: greedy 방식으로 max_new_tokens만큼 다음 토큰을 이어 붙입니다."""
-    raise NotImplementedError("generate_text_simple을 구현하세요.")
+    """"""
+    
+    for _ in range(max_new_tokens):
+        idx_cnt = idx[:, -context_size:]
+
+        # 과정에서 gradient 산출하지 말고 바로 연산할 것: 역전파를 하지 않겠다 뜻  
+        with torch.no_grad():
+            logits = model(idx_cnt)
+
+        # 마지막 단어 점수판만 추출: (B, C_T_L, V_C) => (B_S, V_S)
+        # 마지막 행을 기준으로 확률값으로 산출  
+        logits = logits[:, -1, :]
+        probas = torch.softmax(logits, dim=-1)
+
+        # 마지막 차원(dim-1) 기준으로 max인 점수인 ID를 가져오고, 2차원 형태는 유지
+        # 기존 id 행렬 뒤에 붙이기: 여러 문장의 뒷 단어를 한꺼번에
+        idx_next = torch.argmax(probas, dim=-1, keepdim=True)
+        idx = torch.cat((idx, idx_next), dim=1)
+
+    return idx
