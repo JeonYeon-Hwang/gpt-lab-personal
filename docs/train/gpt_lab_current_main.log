@@ -1,0 +1,12 @@
+[gpt_lab_current_main] start device=cuda:0 train=20000 val=2000 epochs=5 batch=256
+[gpt_lab_current_main] epoch 1 start
+[gpt_lab_current_main] epoch 1 train=0.6840/0.5736 train_eval=0.6238/0.6497 val=0.6500/0.6140
+[gpt_lab_current_main] epoch 2 start
+[gpt_lab_current_main] epoch 2 train=0.6252/0.6438 train_eval=0.5826/0.6878 val=0.6283/0.6500
+[gpt_lab_current_main] epoch 3 start
+[gpt_lab_current_main] epoch 3 train=0.5919/0.6779 train_eval=0.5419/0.7252 val=0.5936/0.6770
+[gpt_lab_current_main] epoch 4 start
+[gpt_lab_current_main] epoch 4 train=0.5613/0.7060 train_eval=0.5041/0.7547 val=0.5753/0.6855
+[gpt_lab_current_main] epoch 5 start
+[gpt_lab_current_main] epoch 5 train=0.5297/0.7287 train_eval=0.4619/0.7788 val=0.5589/0.7080
+run_id=gpt_lab_current_main fit_status=good_fit best_val_acc=0.7080
