@@ -101,8 +101,9 @@ class MultiHeadAttention(nn.Module):
         delta_E = delta_E.transpose(1, 2).contiguous()
         delta_E = delta_E.view(delta_E.size(0), delta_E.size(1), -1)
 
-        # 7. delta_E + E
-        out_E = delta_E + x
+        # 7. 드롭아웃 등 진행
+        out_E = self.out_proj(delta_E)
+        out_E = self.dropout(out_E)
 
         if return_attention_weights:
             return out_E, attention_weight
