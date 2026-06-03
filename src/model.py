@@ -35,18 +35,45 @@ class GELU(nn.Module):
     """GPT FeedForward에서 사용하는 GELU 활성화 함수."""
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0 / torch.pi)) * 
+        return 0.5 * x * (1 + torch.tanh(0.7978845608028654 *
                                         (x + 0.044715 * torch.pow(x, 3))))
+
+
+class QuickGELU(nn.Module):
+    """quick_gelu: x * sigmoid(1.702 * x)."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.sigmoid(1.702 * x)
+
+
+def build_activation(activation_name: str = "gelu") -> nn.Module:
+    """FeedForward에서 사용할 activation module을 생성합니다."""
+    if activation_name == "gelu":
+        return GELU()
+    if activation_name == "gelu_exact":
+        return nn.GELU(approximate="none")
+    if activation_name == "quick_gelu":
+        return QuickGELU()
+
+    raise ValueError(
+        "activation_name must be one of: gelu, gelu_exact, quick_gelu"
+    )
 
 
 class FeedForward(nn.Module):
     """Transformer FFN: Linear -> GELU -> Linear -> Dropout."""
 
-    def __init__(self, d_model: int, dropout: float = 0.1, mult: int = 4):
+    def __init__(
+        self,
+        d_model: int,
+        dropout: float = 0.1,
+        mult: int = 4,
+        activation_name: str = "gelu",
+    ):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(d_model, d_model * mult),
-            GELU(),
+            build_activation(activation_name),
             nn.Linear(d_model * mult, d_model),
             nn.Dropout(dropout)
         )
@@ -68,6 +95,7 @@ class TransformerBlock(nn.Module):
         n_heads: int,
         drop_rate: float = 0.1,
         qkv_bias: bool = False,
+        activation_name: str = "gelu",
     ):
         super().__init__()
         self.att = MultiHeadAttention(
@@ -78,7 +106,8 @@ class TransformerBlock(nn.Module):
         
         self.ff = FeedForward(
             d_model=d_model,
-            dropout=drop_rate)
+            dropout=drop_rate,
+            activation_name=activation_name)
         
         self.norm1 = LayerNorm(normalized_shape=d_model)
         self.norm2 = LayerNorm(normalized_shape=d_model)
@@ -115,13 +144,14 @@ class GPTModel(nn.Module):
         n_layers = config["n_layers"]
         n_heads = config["n_heads"]
         qkv_bias = config["qkv_bias"]
+        activation_name = config.get("activation_name", "gelu")
 
         self.tok_emb = nn.Embedding(v_size, e_dim)
         self.pos_emb = nn.Embedding(context_len, e_dim)
         self.drop_emb = nn.Dropout(drop_rate)
 
         self.trf_blocks = nn.Sequential(
-            *[TransformerBlock(e_dim, n_heads, drop_rate, qkv_bias) 
+            *[TransformerBlock(e_dim, n_heads, drop_rate, qkv_bias, activation_name) 
               for _ in range(n_layers)]
         )
 
