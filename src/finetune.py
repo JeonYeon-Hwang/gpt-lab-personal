@@ -106,7 +106,6 @@ class GPTForSequenceClassification(nn.Module):
         self.dropout = nn.Dropout(drop_rate)
         self.classifier = nn.Linear(gpt_model.config["emb_dim"], num_labels)
 
-    # 
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -129,7 +128,12 @@ class GPTForSequenceClassification(nn.Module):
         hidden_states = self.gpt.final_norm(x)
 
         # 두 번째 요소 기준 마지막 가져오기: (batch, 단어 수, 차원 수) => (batch, 차원 수)
-        last_token_vector = hidden_states[:, -1, :]
+        # pad_id 추적하기: batch 샘플 번호 만들기 => 마지막 토큰 찾기
+        pad_id = 0
+        batch_indices = torch.arange(input_ids.size(0), device=input_ids.device)
+        last_indices = (input_ids != pad_id).sum(dim=1) - 1
+        last_token_vector = hidden_states[batch_indices, last_indices, :]
+
         # 1. dropout: 무작위로 차원 중 10%를 0으로 지움
         # 2. classifier: 차원을 2개로 강제로 줄임
         logits = self.classifier(self.dropout(last_token_vector))
@@ -151,6 +155,8 @@ def train_epoch_sentiment(
     device: torch.device,
 ) -> tuple[float, float]:
     """"""
+    model.train()
+
     # 변수 선언
     total_loss = 0
     correct = 0
